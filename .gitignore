@@ -1,0 +1,7 @@
+/_build/
+/deps/
+/doc/
+/cover/
+/.expert/
+/*.tar
+erl_crash.dump

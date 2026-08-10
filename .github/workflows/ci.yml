@@ -1,0 +1,66 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Elixir ${{ matrix.elixir }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: 28.5
+            elixir: 1.18.4
+          - otp: 28.5
+            elixir: 1.19.5
+            lint: true
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install OTP and Elixir
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-otp${{ matrix.otp }}-elixir${{ matrix.elixir }}-${{ hashFiles('mix.lock') }}
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check for unused dependencies
+        if: ${{ matrix.lint && steps.cache-deps.outputs.cache-hit != 'true' }}
+        run: mix deps.unlock --check-unused
+
+      - name: Check compilation warnings
+        if: ${{ matrix.lint }}
+        run: mix compile --warnings-as-errors
+
+      - name: Check formatting
+        if: ${{ matrix.lint }}
+        run: mix format --check-formatted
+
+      - name: Run tests
+        run: mix test
+
+      - name: Scan package files
+        if: ${{ matrix.lint }}
+        run: mix secret_scan
+
+      - name: Build package
+        if: ${{ matrix.lint }}
+        run: mix hex.build
