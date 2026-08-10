@@ -1,16 +1,9 @@
 defmodule SecretScan.Rules do
-  @moduledoc """
-  The secret scanning ruleset, vendored from gitleaks.
+  @moduledoc false
 
-  Rules come from the package's vendored `rules/gitleaks.toml` and nothing else.
-  We don't write our own: a rule nobody upstream has validated is where false
-  positives come from, and a rule that consults our own data would answer
-  questions about it to whoever supplies the input.
-
-  The TOML is parsed at compile time into plain data. Regexes and the keyword
-  trie are built once at runtime into `:persistent_term`, because a compiled
-  pattern is a resource that can't survive being baked into a module.
-  """
+  # Rules come from the vendored Gitleaks config. The TOML is parsed at compile
+  # time into plain data. Regexes and the keyword matcher are built once at
+  # runtime because compiled patterns can't be stored in module attributes.
 
   # Read only at compile time. `mix secret_scan.refresh` rewrites it.
   @gitleaks_config Path.expand("../../rules/gitleaks.toml", __DIR__)
@@ -144,31 +137,22 @@ defmodule SecretScan.Rules do
     raise "Hexpm rules do not exist: #{inspect(unknown_hexpm_rules)}"
   end
 
-  @doc "Every rule, compiled."
+  # Returns every compiled rule for the scanner and internal validation.
   def all, do: compiled().rules
 
-  @doc """
-  Rules that match on the file path alone, with no content regex.
+  def rule_ids(:all), do: Enum.map(@raw_rules, & &1["id"])
+  def rule_ids(:hexpm), do: @hexpm_rules
 
-  `selection` is the value returned by `resolve!/1`.
-  """
+  # These rules match on the file path alone, with no content regex.
   def path_rules(selection \\ :all), do: select(compiled().path_rules, selection)
 
-  @doc "The allowlists that apply to every rule."
   def global_allowlists, do: compiled().global_allowlists
 
-  @doc "Whether a rule is in the ruleset used by Hexpm."
   def hexpm?(rule_id), do: MapSet.member?(compiled().hexpm, rule_id)
 
-  @doc false
   def hexpm_rule_ids, do: @hexpm_rules
 
-  @doc """
-  Resolves a public rule selection for use during a scan.
-
-  Accepts `:all`, `:hexpm`, or a list of Gitleaks rule ids. Unknown ids raise
-  `ArgumentError` so a misspelled CI rule can't silently disable scanning.
-  """
+  # Unknown IDs raise so a misspelled CI rule can't silently disable scanning.
   def resolve!(:all), do: :all
   def resolve!(:hexpm), do: compiled().hexpm
 
@@ -192,7 +176,6 @@ defmodule SecretScan.Rules do
           ":rules must be :all, :hexpm, or a list of Gitleaks rule ids, got: #{inspect(other)}"
   end
 
-  @doc false
   def resolve_priority!(:none), do: :none
   def resolve_priority!(:all), do: :all
   def resolve_priority!(:hexpm), do: compiled().hexpm
@@ -203,13 +186,8 @@ defmodule SecretScan.Rules do
           ":priority_rules must be :all, :hexpm, :none, or a list of Gitleaks rule ids, got: #{inspect(other)}"
   end
 
-  @doc """
-  The content rules that apply to `path`, dropping those restricted elsewhere.
-
-  A handful of rules only make sense in one kind of file, such as a NuGet password in
-  `nuget.config`, a Terraform password in `.tf`. `selection` is the value
-  returned by `resolve!/1`.
-  """
+  # Some rules only apply to a particular file type, such as NuGet passwords
+  # in nuget.config and Terraform passwords in .tf files.
   def for_path(path, selection \\ :all) do
     compiled().content_rules
     |> select(selection)
@@ -219,15 +197,8 @@ defmodule SecretScan.Rules do
   defp select(rules, :all), do: rules
   defp select(rules, selected), do: Enum.filter(rules, &MapSet.member?(selected, &1.id))
 
-  @doc """
-  Narrows `rules` to those whose keywords appear in `content`.
-
-  Every rule declares literal substrings that must be present for its regex to
-  have any chance of matching, so one Aho-Corasick pass over the content
-  usually leaves a handful of rules to actually run. On Elixir source that is
-  1-5 of 222, and it is the difference between 2 seconds and 150 milliseconds
-  per 256 KB.
-  """
+  # Narrows rules to those whose declared keywords appear in the content.
+  # This leaves only a few regexes to run for most source files.
   def candidates(rules, content) do
     %{keyword_pattern: pattern} = compiled()
     lowered = ascii_downcase(content)
@@ -270,7 +241,7 @@ defmodule SecretScan.Rules do
     Map.get(containment, keyword, [keyword])
   end
 
-  @doc "Shannon entropy of a string in bits per byte, as gitleaks measures it."
+  # Shannon entropy in bits per byte, using the same formula as Gitleaks.
   def entropy(""), do: 0.0
 
   def entropy(string) do
@@ -285,21 +256,14 @@ defmodule SecretScan.Rules do
     end)
   end
 
-  @doc "Whether the global allowlist excludes this path from scanning entirely."
   def allowed_path?(path) do
     Enum.any?(compiled().global_allowlists, fn allowlist ->
       Enum.any?(allowlist.paths, &Regex.match?(&1, path))
     end)
   end
 
-  @doc """
-  Whether any allowlist suppresses this match.
-
-  `regexes` test the allowlist's `regexTarget` (the secret by default, or the
-  whole match, or the line it sits on), `paths` test the file path, `stopwords`
-  are substrings of the secret. A `condition` of `AND` requires every
-  configured criterion to hit; the default is any of them.
-  """
+  # Regexes test the configured target, paths test the file path, and stopwords
+  # test the secret. AND requires every configured criterion; OR requires one.
   def allowed?(allowlists, targets) do
     Enum.any?(allowlists, &allowlist_matches?(&1, targets))
   end
@@ -336,13 +300,8 @@ defmodule SecretScan.Rules do
   defp target(targets, :match), do: targets.match
   defp target(targets, :line), do: targets.line
 
-  @doc """
-  Lowercases ASCII letters, leaving offsets and every other byte alone.
-
-  Keywords and stopwords are all ASCII, so this is enough to match them, and
-  unlike `String.downcase/1` it doesn't care whether the input is valid UTF-8,
-  half the files in a package are not text at all.
-  """
+  # Keywords and stopwords are ASCII. Lowercasing byte by byte preserves
+  # offsets and works for binary files that aren't valid UTF-8.
   def ascii_downcase(binary) do
     for <<byte <- binary>>, into: <<>> do
       if byte >= ?A and byte <= ?Z, do: <<byte + 32>>, else: <<byte>>

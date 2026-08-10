@@ -44,6 +44,21 @@ defmodule SecretScanTest do
              SecretScan.scan(dir, rules: ["pkcs12-file"])
   end
 
+  test "lists rule ids without exposing compiled rules" do
+    all = SecretScan.rule_ids()
+    hexpm = SecretScan.rule_ids(:hexpm)
+
+    assert "generic-api-key" in all
+    assert "github-pat" in hexpm
+    refute "generic-api-key" in hexpm
+    assert MapSet.subset?(MapSet.new(hexpm), MapSet.new(all))
+    assert length(all) == length(Enum.uniq(all))
+
+    assert_raise ArgumentError, ~r/ruleset must be :all or :hexpm/, fn ->
+      SecretScan.rule_ids(:unknown)
+    end
+  end
+
   test "configures occurrences and previews", %{dir: dir} do
     write(dir, ".env", String.duplicate("GITHUB_TOKEN=#{@github_token}\n", 2))
 

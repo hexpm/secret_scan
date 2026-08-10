@@ -1,13 +1,6 @@
 defmodule SecretScan.Scanner do
   @moduledoc false
 
-  @doc """
-  Runs the ruleset over files without loading whole files into memory.
-
-  Files are streamed in overlapping windows, so peak memory is bounded by one
-  window rather than one file.
-  """
-
   require Logger
 
   alias SecretScan.Rules
@@ -27,6 +20,8 @@ defmodule SecretScan.Scanner do
   # rule already caught the same value, so it loses when they collide.
   @catch_all_rule "generic-api-key"
 
+  # Files are streamed in overlapping windows, so peak memory is bounded by one
+  # window rather than one file.
   def scan_directory(dir, opts) do
     dir = Path.expand(dir)
 
@@ -135,35 +130,8 @@ defmodule SecretScan.Scanner do
     end
   end
 
-  @doc """
-  Scans `file_paths`, relative to `dir`, and returns `{findings, incomplete?}`.
-
-  Findings are capped at the configured `:max_findings`; `incomplete?` says
-  whether anything was dropped or a file couldn't be scanned. Files are
-  scanned concurrently because matching is CPU-bound, and a single file that
-  defeats the keyword prefilter is abandoned after #{div(@file_timeout, 1000)}
-  seconds rather than being allowed to consume the whole scan budget.
-
-  Options include:
-
-    * `:ignore` - file path globs to skip
-    * `:rules` - `:all` (the default), `:hexpm`, or a list of Gitleaks rule ids
-    * `:priority_rules` - rules retained first when `:max_findings` is reached;
-      accepts `:all`, `:hexpm` (the default), `:none`, or rule ids
-    * `:occurrences` - `:all` (the default) or `:first_per_file`
-    * `:preview` - `:masked` (the default) or `:redacted`
-    * `:fingerprint_key` - HMAC key for stable fingerprints. A random key is
-      generated for each scan when omitted.
-    * `:file_timeout` - per-file timeout in milliseconds
-    * `:scan_timeout` - whole-scan timeout in milliseconds
-    * `:max_concurrency` - maximum files scanned at once, defaults to the
-      number of online schedulers
-    * `:max_findings` - maximum findings returned, defaults to
-      #{@default_max_findings}
-    * `:max_locations` - maximum locations returned for one credential,
-      defaults to #{@default_max_locations}
-    * `:max_path_length` - maximum stored path length, defaults to `:infinity`
-  """
+  # This entry point scans an explicit list of paths for the Hexpm integration
+  # and the Mix task. Public callers scan a directory through SecretScan.scan/2.
   def scan_files(dir, file_paths, opts \\ []) do
     started_at = System.monotonic_time(:millisecond)
     opts = prepare_opts(opts)
@@ -426,11 +394,7 @@ defmodule SecretScan.Scanner do
     |> Enum.uniq_by(&{&1.fingerprint, &1.file_path})
   end
 
-  @doc """
-  Scans one file, relative to `dir`.
-
-  Accepts the same options as `scan_files/3`.
-  """
+  # Used by focused scanner tests and callers that already selected one path.
   def scan_file(dir, path, opts \\ []) do
     opts = prepare_opts(opts)
 
@@ -474,13 +438,7 @@ defmodule SecretScan.Scanner do
       {:error, exception}
   end
 
-  @doc """
-  Scans content already in memory, under the name `path`.
-
-  Same windowing as reading from disk, so a caller holding the bytes already,
-  such as a corpus scan unpacking tarballs straight to memory, gets the same answer
-  without a round trip through the filesystem.
-  """
+  # Uses the same windowing as file scans without a filesystem round trip.
   def scan_content(path, content, opts \\ []) do
     opts = prepare_opts(opts)
 
@@ -670,7 +628,6 @@ defmodule SecretScan.Scanner do
     end
   end
 
-  @doc false
   # Emits `{content, offset, first?, last?, newlines_before}` windows, each the
   # last #{@carry_size} bytes of the previous window followed by the next chunk.
   # `last?` comes from the total size rather than from waiting to see the
@@ -682,7 +639,6 @@ defmodule SecretScan.Scanner do
     |> windows(File.stat!(absolute_path).size)
   end
 
-  @doc false
   def binary_windows(content) do
     size = byte_size(content)
 
@@ -866,13 +822,7 @@ defmodule SecretScan.Scanner do
 
   defp count_newlines(binary), do: length(:binary.matches(binary, "\n"))
 
-  @doc """
-  Masks a secret for display, keeping enough of it to be recognisable.
-
-  The raw value isn't returned, only this and an HMAC fingerprint. The
-  mask is a fixed width rather than the secret's length, so a matched PEM block
-  doesn't become a three kilobyte row of asterisks.
-  """
+  # The fixed-width mask avoids turning a matched PEM block into a large result.
   def redact(secret) do
     size = byte_size(secret)
     # Never show more than a sixth from each end. The finding also carries an

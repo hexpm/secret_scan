@@ -31,7 +31,8 @@ defmodule Mix.Tasks.SecretScan do
   `:files` can set task options for that project, including `:rules`,
   `:priority_rules`, `:occurrences`, `:preview`, `:file_timeout`, `:scan_timeout`,
   `:max_concurrency`, `:max_findings`, `:max_locations`, and
-  `:max_path_length`.
+  `:max_path_length`. See `SecretScan.scan/2` for their values, defaults, and
+  behavior.
   """
 
   @impl Mix.Task

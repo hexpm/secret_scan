@@ -92,7 +92,8 @@ SecretScan.scan(File.cwd!(),
 
 Unknown ids raise instead of silently disabling a CI check. The same `:rules`
 option works in the top-level `:secret_scan` project config used by
-`mix secret_scan`.
+`mix secret_scan`. Use `SecretScan.rule_ids/1` to list the IDs in the `:all` or
+`:hexpm` ruleset.
 
 When `:max_findings` is reached, `priority_rules: :hexpm` retains findings from
 the high-precision Hex.pm ruleset first. This is the default. Pass `:none`,
