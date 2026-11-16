@@ -17,6 +17,12 @@ defmodule Mix.Tasks.SecretScan.RefreshTest do
     refute license =~ "/master/"
   end
 
+  test "authenticates the GitHub API request when a token is set" do
+    assert Refresh.api_options("token") == [auth: {:bearer, "token"}]
+    assert Refresh.api_options("") == []
+    assert Refresh.api_options(nil) == []
+  end
+
   test "records the selected commit" do
     sha = String.duplicate("a", 40)
 
