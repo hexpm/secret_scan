@@ -8,6 +8,9 @@ defmodule Mix.Tasks.SecretScan.Refresh do
   Pass `--check-outdated` to exit with status 100 when any vendored source
   differs from that revision.
 
+  Set `GH_TOKEN` to authenticate the GitHub API request that looks up the
+  revision.
+
       mix secret_scan.refresh
       mix secret_scan.refresh --check-outdated
   """
@@ -153,6 +156,11 @@ defmodule Mix.Tasks.SecretScan.Refresh do
     end)
   end
 
+  @doc false
+  def api_options(nil), do: []
+  def api_options(""), do: []
+  def api_options(token) when is_binary(token), do: [auth: {:bearer, token}]
+
   defp fetch!(url) do
     %{status: 200, body: body} = apply(Req, :get!, [url, [decode_body: false]])
     body
@@ -164,7 +172,7 @@ defmodule Mix.Tasks.SecretScan.Refresh do
 
   defp latest_commit! do
     %{status: 200, body: [%{"sha" => sha, "commit" => commit} | _]} =
-      apply(Req, :get!, [@commits])
+      apply(Req, :get!, [@commits, api_options(System.get_env("GH_TOKEN"))])
 
     {sha, commit["committer"]["date"]}
   end
